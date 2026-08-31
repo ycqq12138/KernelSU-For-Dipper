@@ -129,6 +129,8 @@ jobs:
 
         export PATH=$CLANG_PATH:$GCC64_PATH:$GCC32_PATH:$PATH
 
+        sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        sed -i 's/# CONFIG_CC_STACKPROTECTOR is not set/CONFIG_CC_STACKPROTECTOR=y/' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         make O=out ARCH=arm64 \
           CC=clang \
           CLANG_TRIPLE=aarch64-linux-gnu- \
