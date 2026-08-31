@@ -123,13 +123,13 @@ jobs:
     - name: Build kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        
+
         CLANG_PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin
         GCC64_PATH=$GITHUB_WORKSPACE/kernel_workspace/gcc-64/bin
         GCC32_PATH=$GITHUB_WORKSPACE/kernel_workspace/gcc-32/bin
-        
+
         export PATH=$CLANG_PATH:$GCC64_PATH:$GCC32_PATH:$PATH
-        
+
         make O=out ARCH=arm64 \
           CC=clang \
           CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -137,7 +137,7 @@ jobs:
           CROSS_COMPILE_ARM32=arm-linux-androideabi- \
           LD=ld.lld \
           ${{ env.KERNEL_CONFIG }}
-        
+
         make O=out -j$(nproc) ARCH=arm64 \
           CC="ccache clang" \
           CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -193,15 +193,15 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         mkdir -p release
-        
+
         # Copy kernel image
         cp android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE }} release/
-        
+
         # Copy boot.img if built
         if [ "${{ env.BOOT_IMAGE_OK }}" = "true" ]; then
           cp boot.img release/
         fi
-        
+
         # Create a README for the release
         cat > release/README.txt << READMEEOF
 Xiaomi Mi 8 (dipper) Clean Kernel Build
@@ -220,7 +220,7 @@ READMEEOF
         if [ "${{ env.BOOT_IMAGE_OK }}" = "true" ]; then
           echo "  - boot.img       Ready-to-flash boot image (fastboot flash boot boot.img)" >> release/README.txt
         fi
-        
+
         echo "Release files:"
         ls -lh release/
 
@@ -232,9 +232,9 @@ READMEEOF
         name: "Clean Kernel ${{ env.DEVICE }} ${{ env.BUILD_TIME }}"
         body: |
           ## Xiaomi Mi 8 (dipper) Clean Kernel
-          
+
           **No KernelSU** - Pure kernel for testing compatibility
-          
+
           | Item | Value |
           |------|-------|
           | Source | [${{ env.KERNEL_SOURCE }}](${{ env.KERNEL_SOURCE }}) |
@@ -244,12 +244,12 @@ READMEEOF
           | Compiler | AOSP Clang r353983c + GCC 4.9 |
           | Kernel Image | ✅ |
           | Boot Image | ${{ env.BOOT_IMAGE_OK == 'true' && '✅' || '❌ (no source boot.img)' }} |
-          
+
           ### Flash
           ```bash
           # Option 1: Direct flash boot.img
           fastboot flash boot boot-clean-dipper-${{ env.BUILD_TIME }}/boot.img
-          
+
           # Option 2: Use magiskboot to repack with your own boot.img
           magiskboot unpack your-boot.img
           mv Image.gz-dtb kernel
