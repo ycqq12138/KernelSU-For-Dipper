@@ -1,0 +1,283 @@
+name: Build Clean Kernel for Dipper
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_source:
+        description: 'Kernel source URL'
+        required: true
+        default: 'https://github.com/yaap/kernel_xiaomi_dipper'
+      kernel_branch:
+        description: 'Kernel branch'
+        required: true
+        default: 'eleven'
+      kernel_config:
+        description: 'Kernel defconfig'
+        required: true
+        default: 'dipper_defconfig'
+      kernel_image:
+        description: 'Kernel image name'
+        required: true
+        default: 'Image.gz-dtb'
+      boot_image_url:
+        description: 'Source boot.img URL (direct link)'
+        required: false
+        default: 'https://raw.githubusercontent.com/ycqq12138/KernelSU-For-Dipper/main/boot/boot-miui12.img'
+
+jobs:
+  build:
+    name: Build Clean Kernel
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CCACHE_MAXSIZE: "8G"
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set variables
+      run: |
+        echo "KERNEL_SOURCE=${{ github.event.inputs.kernel_source }}" >> $GITHUB_ENV
+        echo "KERNEL_BRANCH=${{ github.event.inputs.kernel_branch }}" >> $GITHUB_ENV
+        echo "KERNEL_CONFIG=${{ github.event.inputs.kernel_config }}" >> $GITHUB_ENV
+        echo "KERNEL_IMAGE=${{ github.event.inputs.kernel_image }}" >> $GITHUB_ENV
+        echo "BOOT_IMAGE_URL=${{ github.event.inputs.boot_image_url }}" >> $GITHUB_ENV
+        echo "BUILD_TIME=$(TZ=Asia/Shanghai date '+%Y%m%d-%H%M')" >> $GITHUB_ENV
+        echo "RELEASE_TAG=clean-$(TZ=Asia/Shanghai date '+%Y%m%d-%H%M')" >> $GITHUB_ENV
+        echo "DEVICE=dipper" >> $GITHUB_ENV
+
+    - name: Free disk space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: true
+        android: false
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: false
+
+    - name: Set swap to 10GB
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 10
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          git ccache automake flex lzop bison gperf \
+          build-essential zip curl zlib1g-dev g++-multilib \
+          libxml2-utils bzip2 libbz2-dev libbz2-1.0 \
+          libghc-bzlib-dev squashfs-tools pngcrush schedtool \
+          dpkg-dev liblz4-tool make optipng maven libssl-dev \
+          pwgen libswitch-perl policycoreutils minicom \
+          libxml-sax-base-perl libxml-simple-perl bc \
+          libc6-dev-i386 libx11-dev \
+          lib32z-dev libgl1-mesa-dev xsltproc unzip \
+          device-tree-compiler python3 python3-pip \
+          gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
+
+    - name: Download AOSP Clang
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        mkdir clang-aosp
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android10-release/clang-r353983c.tar.gz -O clang.tar.gz
+        tar -C clang-aosp/ -zxf clang.tar.gz
+        rm clang.tar.gz
+        echo "Clang version:"
+        clang-aosp/bin/clang --version
+
+    - name: Download GCC cross-compilers
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        mkdir gcc-64
+        wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz -O gcc64.tar.gz
+        tar -C gcc-64/ -zxf gcc64.tar.gz
+        rm gcc64.tar.gz
+        mkdir gcc-32
+        wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz -O gcc32.tar.gz
+        tar -C gcc-32/ -zxf gcc32.tar.gz
+        rm gcc32.tar.gz
+
+    - name: Clone kernel source
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone --depth=1 -b ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_SOURCE }} android-kernel
+        cd android-kernel
+        echo "KERNEL_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+        echo "Kernel: $(git rev-parse --short HEAD) on $(git branch --show-current)"
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: clean-kernel-${{ env.DEVICE }}
+        max-size: 8G
+
+    - name: Build kernel
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+
+        CLANG_PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin
+        GCC64_PATH=$GITHUB_WORKSPACE/kernel_workspace/gcc-64/bin
+        GCC32_PATH=$GITHUB_WORKSPACE/kernel_workspace/gcc-32/bin
+
+        export PATH=$CLANG_PATH:$GCC64_PATH:$GCC32_PATH:$PATH
+
+        make O=out ARCH=arm64 \
+          CC=clang \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE=aarch64-linux-android- \
+          CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+          LD=ld.lld \
+          ${{ env.KERNEL_CONFIG }}
+
+        make O=out -j$(nproc) ARCH=arm64 \
+          CC="ccache clang" \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE=aarch64-linux-android- \
+          CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+          LD=ld.lld
+
+    - name: Check kernel output
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        if [ -f android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE }} ]; then
+          echo "KERNEL_BUILD_OK=true" >> $GITHUB_ENV
+          echo "Kernel image:"
+          ls -lh android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE }}
+        else
+          echo "Kernel build failed"
+          exit 1
+        fi
+
+    - name: Download mkbootimg tools
+      if: env.BOOT_IMAGE_URL != '' && env.KERNEL_BUILD_OK == 'true'
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone https://android.googlesource.com/platform/system/tools/mkbootimg tools -b master-kernel-build-2022 --depth=1
+
+    - name: Download source boot image
+      if: env.BOOT_IMAGE_URL != '' && env.KERNEL_BUILD_OK == 'true'
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        wget -O boot-source.img "${{ env.BOOT_IMAGE_URL }}"
+        if [ -f boot-source.img ]; then
+          echo "FORMAT_MKBOOTIMG=$(tools/unpack_bootimg.py --boot_img=boot-source.img --format mkbootimg)" >> $GITHUB_ENV
+          echo "HAVE_SOURCE_BOOT_IMAGE=true" >> $GITHUB_ENV
+          ls -lh boot-source.img
+        fi
+
+    - name: Build boot.img
+      if: env.HAVE_SOURCE_BOOT_IMAGE == 'true'
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        tools/unpack_bootimg.py --boot_img boot-source.img
+        cp android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE }} out/kernel
+        tools/mkbootimg.py ${{ env.FORMAT_MKBOOTIMG }} -o boot.img
+        if [ -f boot.img ]; then
+          echo "BOOT_IMAGE_OK=true" >> $GITHUB_ENV
+          ls -lh boot.img
+        else
+          echo "boot.img build failed"
+        fi
+
+    - name: Prepare release files
+      if: env.KERNEL_BUILD_OK == 'true'
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        mkdir -p release
+
+        # Copy kernel image
+        cp android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE }} release/
+
+        # Copy boot.img if built
+        if [ "${{ env.BOOT_IMAGE_OK }}" = "true" ]; then
+          cp boot.img release/
+        fi
+
+        # Create a README for the release
+        cat > release/README.txt << READMEEOF
+Xiaomi Mi 8 (dipper) Clean Kernel Build
+========================================
+Build Time:  ${{ env.BUILD_TIME }}
+Source:      ${{ env.KERNEL_SOURCE }}
+Branch:      ${{ env.KERNEL_BRANCH }}
+Commit:      ${{ env.KERNEL_COMMIT }}
+Config:      ${{ env.KERNEL_CONFIG }}
+Image:       ${{ env.KERNEL_IMAGE }}
+Compiler:    AOSP Clang r353983c + GCC 4.9
+
+Files:
+  - ${{ env.KERNEL_IMAGE }}    Kernel image (flash via AnyKernel3 or custom boot.img)
+READMEEOF
+        if [ "${{ env.BOOT_IMAGE_OK }}" = "true" ]; then
+          echo "  - boot.img       Ready-to-flash boot image (fastboot flash boot boot.img)" >> release/README.txt
+        fi
+
+        echo "Release files:"
+        ls -lh release/
+
+    - name: Upload to GitHub Release
+      if: env.KERNEL_BUILD_OK == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: "Clean Kernel ${{ env.DEVICE }} ${{ env.BUILD_TIME }}"
+        body: |
+          ## Xiaomi Mi 8 (dipper) Clean Kernel
+
+          **No KernelSU** - Pure kernel for testing compatibility
+
+          | Item | Value |
+          |------|-------|
+          | Source | [${{ env.KERNEL_SOURCE }}](${{ env.KERNEL_SOURCE }}) |
+          | Branch | `${{ env.KERNEL_BRANCH }}` |
+          | Commit | `${{ env.KERNEL_COMMIT }}` |
+          | Config | `${{ env.KERNEL_CONFIG }}` |
+          | Compiler | AOSP Clang r353983c + GCC 4.9 |
+          | Kernel Image | ✅ |
+          | Boot Image | ${{ env.BOOT_IMAGE_OK == 'true' && '✅' || '❌ (no source boot.img)' }} |
+
+          ### Flash
+          ```bash
+          # Option 1: Direct flash boot.img
+          fastboot flash boot boot-clean-dipper-${{ env.BUILD_TIME }}/boot.img
+
+          # Option 2: Use magiskboot to repack with your own boot.img
+          magiskboot unpack your-boot.img
+          mv Image.gz-dtb kernel
+          magiskboot repack your-boot.img
+          fastboot flash boot new-boot.img
+          ```
+        files: |
+          kernel_workspace/release/*
+        draft: false
+        prerelease: false
+
+    - name: Build summary
+      if: always()
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Device | ${{ env.DEVICE }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Source | ${{ env.KERNEL_SOURCE }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Branch | ${{ env.KERNEL_BRANCH }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Commit | ${{ env.KERNEL_COMMIT }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Config | ${{ env.KERNEL_CONFIG }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Time | ${{ env.BUILD_TIME }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Kernel | ${{ env.KERNEL_BUILD_OK == 'true' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Boot Image | ${{ env.BOOT_IMAGE_OK == 'true' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ env.KERNEL_BUILD_OK }}" = "true" ]; then
+          echo "### 📦 Release" >> $GITHUB_STEP_SUMMARY
+          echo "[Download from Releases](https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }})" >> $GITHUB_STEP_SUMMARY
+        fi
