@@ -140,7 +140,7 @@ jobs:
           LD=ld.lld \
           ${{ env.KERNEL_CONFIG }}
 
-        make O=out KCFLAGS="-Wno-frame-larger-than=9999" -j$(nproc) ARCH=arm64 \
+        make O=out -j$(nproc) ARCH=arm64 \
           CC="ccache clang" \
           CLANG_TRIPLE=aarch64-linux-gnu- \
           CROSS_COMPILE=aarch64-linux-android- \
