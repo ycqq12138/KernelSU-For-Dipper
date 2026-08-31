@@ -1,4 +1,4 @@
-name: Build Clean Kernel (No KernelSU)
+name: Build Clean Kernel for Dipper
 
 on:
   workflow_dispatch:
