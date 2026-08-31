@@ -203,20 +203,17 @@ jobs:
         fi
 
         # Create a README for the release
-        cat > release/README.txt << READMEEOF
-Xiaomi Mi 8 (dipper) Clean Kernel Build
-========================================
-Build Time:  ${{ env.BUILD_TIME }}
-Source:      ${{ env.KERNEL_SOURCE }}
-Branch:      ${{ env.KERNEL_BRANCH }}
-Commit:      ${{ env.KERNEL_COMMIT }}
-Config:      ${{ env.KERNEL_CONFIG }}
-Image:       ${{ env.KERNEL_IMAGE }}
-Compiler:    AOSP Clang r353983c + GCC 4.9
-
-Files:
-  - ${{ env.KERNEL_IMAGE }}    Kernel image (flash via AnyKernel3 or custom boot.img)
-READMEEOF
+        printf "Xiaomi Mi 8 (dipper) Clean Kernel Build\n" > release/README.txt
+        printf "========================================\n" >> release/README.txt
+        printf "Build Time:  %s\n" "${{ env.BUILD_TIME }}" >> release/README.txt
+        printf "Source:      %s\n" "${{ env.KERNEL_SOURCE }}" >> release/README.txt
+        printf "Branch:      %s\n" "${{ env.KERNEL_BRANCH }}" >> release/README.txt
+        printf "Commit:      %s\n" "${{ env.KERNEL_COMMIT }}" >> release/README.txt
+        printf "Config:      %s\n" "${{ env.KERNEL_CONFIG }}" >> release/README.txt
+        printf "Image:       %s\n" "${{ env.KERNEL_IMAGE }}" >> release/README.txt
+        printf "Compiler:    AOSP Clang r353983c + GCC 4.9\n" >> release/README.txt
+        printf "\nFiles:\n" >> release/README.txt
+        printf "  - %s    Kernel image\n" "${{ env.KERNEL_IMAGE }}" >> release/README.txt
         if [ "${{ env.BOOT_IMAGE_OK }}" = "true" ]; then
           echo "  - boot.img       Ready-to-flash boot image (fastboot flash boot boot.img)" >> release/README.txt
         fi
