@@ -1,4 +1,4 @@
-﻿name: Build Clean Kernel (No KernelSU)
+name: Build Clean Kernel (No KernelSU)
 
 on:
   workflow_dispatch:
