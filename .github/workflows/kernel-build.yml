@@ -144,12 +144,10 @@ jobs:
         # Fix incompatible compiler flags
         sed -i "s/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/" out/.config || true
         sed -i "s/CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/" out/.config || true
-        # Remove frame-larger-than check to avoid sde_crtc stack frame error
-        # Only remove standalone -Werror and -Wframe-larger-than=xxx flags
-        find . -name "Makefile*" -type f -exec sed -i "s/-Werror\([^=]\)/\1/g" {} \; || true
-        find . -name "Makefile*" -type f -exec sed -i "s/-Werror$//g" {} \; || true
-        # Remove frame-larger-than flag specifically
-        find . -name "Makefile*" -type f -exec sed -i "s/-Wframe-larger-than=[0-9]*//g" {} \; || true
+        # Increase frame warning threshold to avoid sde_crtc stack frame error
+        echo "CONFIG_FRAME_WARN=99999" >> out/.config
+        echo "# CONFIG_CC_STACKPROTECTOR_STRONG is not set" >> out/.config
+        echo "# CONFIG_SHADOW_CALL_STACK is not set" >> out/.config
 
         make O=out -j$(nproc) ARCH=arm64 \
           CC="ccache clang" \
