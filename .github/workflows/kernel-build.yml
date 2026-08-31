@@ -141,13 +141,11 @@ jobs:
           ${{ env.KERNEL_CONFIG }}
 
 
-        # Fix incompatible compiler flags
-        sed -i "s/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/" out/.config || true
-        sed -i "s/CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/" out/.config || true
-        # Increase frame warning threshold to avoid sde_crtc stack frame error
-        echo "CONFIG_FRAME_WARN=99999" >> out/.config
-        echo "# CONFIG_CC_STACKPROTECTOR_STRONG is not set" >> out/.config
-        echo "# CONFIG_SHADOW_CALL_STACK is not set" >> out/.config
+        # Disable problematic config options in defconfig
+        sed -i "s/CONFIG_CC_STACKPROTECTOR_STRONG=y/# CONFIG_CC_STACKPROTECTOR_STRONG is not set/" arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        sed -i "s/CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/" arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        # Increase FRAME_WARN to avoid sde_crtc stack frame error
+        sed -i "s/CONFIG_FRAME_WARN=2048/CONFIG_FRAME_WARN=99999/" arch/arm64/configs/${{ env.KERNEL_CONFIG }}
 
         make O=out -j$(nproc) ARCH=arm64 \
           CC="ccache clang" \
